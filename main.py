@@ -88,7 +88,7 @@ def normalize_links(links, protocol_domen, url):
     return normalized
 
 
-def crowler(url, visited=None, depth=5):
+def crawler(url, visited=None, depth=5):
     visited = set(visited) if visited else set()
     visited.add(url)
 
