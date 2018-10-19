@@ -1,5 +1,6 @@
 # coding: utf8
 import re
+import sys
 import time
 import json
 
@@ -150,12 +151,18 @@ def crawler(url, visited=None, depth=5):
 
 @work_time
 def main():
-    index, visited = crawler('http://stankin.ru/', depth=1)
-    print(u'INDEX:\n{}\n'.format(json.dumps(index, indent=4)))
+    if len(sys.argv) != 4:
+        print('usage: python main.py [http-address] [max-depth] [output]')
+        sys.exit(-1)
+    _, url, depth, outputpath = sys.argv
+
+    index, visited = crawler(url, depth=int(depth))
+
+    with open(outputpath, 'w') as out:
+        out.write(json.dumps(index, indent=4))
+
     print(u'VISITED:\n{}\n'.format(json.dumps(list(visited), indent=4)))
 
-    for word in index:
-        print(word)
 
 if __name__ == '__main__':
     main()
