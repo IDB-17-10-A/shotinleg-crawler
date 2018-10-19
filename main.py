@@ -1,13 +1,23 @@
 # coding: utf8
 import re
 import time
+import json
 
 import requests
+import Stemmer
+
 
 CROWLER_DELAY = 3
 PROTOCOL_PATTERN = re.compile(r'^(?P<protocol>[a-z]+)://')
 DOMEN_PATTERN = re.compile(r'http[s]{0,1}://(?P<domen>[A-Za-z0-9._-]+)')
 LINK_PATTERN = re.compile(r'href="(?P<link>[A-Za-z0-9?&=/:.]+)"')
+HTML_BODY_PATTERN = re.compile(r'<body[A-Za-z=" ]*>(?P<text>[\s\S]+)</body>')
+PATTERNS = [
+    (re.compile(r'<script[A-Za-z="/ ]*>(?P<text>[\s\S]+)</script>'), ''),
+    (re.compile(r'<style[A-Za-z="/ ]*>(?P<text>[\s\S]+)</style>'), ''),
+    (re.compile(r'<.*?>'), ''),
+    (re.compile(r'&nbsp;'), ' ')
+]
 
 
 def work_time(func):
@@ -39,24 +49,40 @@ def get_html_by_url(url):
         return ''
 
 
+def concatenate_index(url_index, sub_url_index):
+    for word, word_index in sub_url_index.items():
+        if word in url_index:
+            url_index.update(word_index)
+
+
 def get_links_from_html(html):
     return LINK_PATTERN.findall(html)
 
  
 def get_text_from_html(html):
-    return ''
+    body = HTML_BODY_PATTERN.search(html)
+    body = body.groupdict()['text'] if body else ''
+    for pattern, replacement in PATTERNS:
+        body = pattern.sub('', body)
+    return body
 
 
 def get_bag_of_words(text):
-   return []
+   return [x.strip() for x in text.split(' ') if x.strip()]
 
 
 def simplify_bag_of_words(bag_of_words):
-    return []
+    ru_stemmer = Stemmer.Stemmer('russian')
+    en_stemmer = Stemmer.Stemmer('english')
+    return [en_stemmer.stemWord(ru_stemmer.stemWord(x)) for x in bag_of_words]
 
 
-def get_url_index(bag_of_words):
-    return {}
+def get_index_from_bag_of_words(bag_of_words, url):
+    index = {}
+    for word in set(bag_of_words):
+        count = bag_of_words.count(word)
+        index[word] = {url: count}
+    return index
 
 
 def filter_invalid_links(links, domen):
@@ -99,7 +125,7 @@ def crawler(url, visited=None, depth=5):
     text = get_text_from_html(html)
     bag_of_words = get_bag_of_words(text)
     bag_of_words = simplify_bag_of_words(bag_of_words)
-    url_index = {url: get_url_index(bag_of_words)}
+    url_index = get_index_from_bag_of_words(bag_of_words, url)
 
     links = get_links_from_html(html)
     links = filter_invalid_links(links, domen)
@@ -108,7 +134,7 @@ def crawler(url, visited=None, depth=5):
 
     if depth - 1 <= 0:
         print('maximum depth achieved.')
-        return {}, visited
+        return url_index, visited
 
     for link in links:
         print('    {}'.format(link))
@@ -117,16 +143,19 @@ def crawler(url, visited=None, depth=5):
     for link in links:
         time.sleep(CROWLER_DELAY)
         sub_url_index, visited = crowler(link, visited, depth - 1)
-        url_index[link] = sub_url_index
-                
+        concatenate_index(url_index, sub_url_index)
+
     return url_index, visited
     
 
 @work_time
 def main():
-    visited = crowler('http://stankin.ru/', depth=3)
-    print(visited)
+    index, visited = crawler('http://stankin.ru/', depth=1)
+    print(u'INDEX:\n{}\n'.format(json.dumps(index, indent=4)))
+    print(u'VISITED:\n{}\n'.format(json.dumps(list(visited), indent=4)))
 
+    for word in index:
+        print(word)
 
 if __name__ == '__main__':
     main()
